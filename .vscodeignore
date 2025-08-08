@@ -17,6 +17,3 @@ package-lock.json
 .DS_Store
 **/.nyc_output/**
 **/coverage/**
-
-
-VS Code extension for navigating to clipboard file paths

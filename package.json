@@ -2,7 +2,7 @@
   "name": "go-to-clipboard-file",
   "displayName": "Go to Clipboard File",
   "description": "Navigate to file:line references from clipboard",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "StefanoChiodino",
   "license": "MIT",
   "repository": {
@@ -19,7 +19,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:go-to-clipboard-file.goToFile"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -34,7 +36,20 @@
         "key": "ctrl+shift+g",
         "mac": "cmd+shift+g"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Go to Clipboard File",
+      "properties": {
+        "go-to-clipboard-file.stripPrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Path prefixes to strip from file paths (useful for container paths like '/app/', '/workspace/')"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run esbuild-base -- --minify",
@@ -46,18 +61,20 @@
     "test": "node ./out/test/runTest.js",
     "package": "rm *.vsix; ./node_modules/.bin/vsce package"
   },
+
+  "dependencies": {},
   "devDependencies": {
+    "@vscode/vsce": "^2.18.0",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "16.x",
+    "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.74.0",
     "@vscode/test-electron": "^2.3.0",
     "esbuild": "^0.17.19",
     "glob": "^8.1.0",
     "mocha": "^11.5.0",
+    "sinon": "^20.0.0",
     "typescript": "^4.9.4"
-  },
-  "dependencies": {
-    "@vscode/vsce": "^2.18.0"
   }
 }

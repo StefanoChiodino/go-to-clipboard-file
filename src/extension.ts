@@ -31,7 +31,11 @@ async function handleGoToFileCommand(): Promise<void> {
     }
 
     const references = parseFileReferences(clipboardText);
-    outputChannel.appendLine('Parsed references: ' + JSON.stringify(references));
+    const displayReferences = references.map(ref => ({
+        ...ref,
+        file: stripDisplayPath(ref.file)
+    }));
+    outputChannel.appendLine('Parsed references: ' + JSON.stringify(displayReferences));
 
     if (references.length === 0) {
         outputChannel.appendLine('No file references found in clipboard');
@@ -89,6 +93,18 @@ async function openResolvedFile(reference: FileLineReference, filePath: string):
     }
 }
 
+function stripDisplayPath(filePath: string): string {
+    const stripPrefixes: string[] = vscode.workspace.getConfiguration('go-to-clipboard-file').get('stripPrefixes') || [];
+    
+    for (const prefix of stripPrefixes) {
+        if (filePath.startsWith(prefix)) {
+            return filePath.substring(prefix.length);
+        }
+    }
+    
+    return filePath;
+}
+
 async function resolveFilePath(filePath: string): Promise<string | null> {
     outputChannel.appendLine('resolveFilePath called with: ' + filePath);
 
@@ -97,91 +113,32 @@ async function resolveFilePath(filePath: string): Promise<string | null> {
         return filePath;
     }
 
+    const stripPrefixes: string[] = vscode.workspace.getConfiguration('go-to-clipboard-file').get('stripPrefixes') || [];
+    let strippedPath = filePath;
+
+    for (const prefix of stripPrefixes) {
+        if (strippedPath.startsWith(prefix)) {
+            strippedPath = strippedPath.substring(prefix.length);
+            outputChannel.appendLine('Stripped prefix "' + prefix + '", new path: ' + strippedPath);
+            break;
+        }
+    }
+
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders) {
         outputChannel.appendLine('No workspace folders found');
         return null;
     }
 
-    outputChannel.appendLine('Workspace folders: ' + JSON.stringify(workspaceFolders.map(f => f.uri.fsPath)));
-
     for (const folder of workspaceFolders) {
-        const absolutePath = path.join(folder.uri.fsPath, filePath);
-        outputChannel.appendLine('Checking full path: ' + absolutePath);
-        if (fs.existsSync(absolutePath)) {
-            outputChannel.appendLine('Found at: ' + absolutePath);
-            return absolutePath;
+        const fullPath = path.join(folder.uri.fsPath, strippedPath);
+        if (fs.existsSync(fullPath)) {
+            outputChannel.appendLine('Found as exact workspace path: ' + fullPath);
+            return fullPath;
         }
     }
 
-    const pathParts = filePath.split(/[\\\/]/);
-    outputChannel.appendLine('Path parts: ' + JSON.stringify(pathParts));
-
-    for (let i = 0; i < pathParts.length; i++) {
-        const partialPath = pathParts.slice(i).join(path.sep);
-        outputChannel.appendLine('Trying partial path: ' + partialPath);
-
-        for (const folder of workspaceFolders) {
-            const absolutePath = path.join(folder.uri.fsPath, partialPath);
-            outputChannel.appendLine('Checking stripped path: ' + absolutePath);
-            if (fs.existsSync(absolutePath)) {
-                outputChannel.appendLine('Found stripped path at: ' + absolutePath);
-                return absolutePath;
-            }
-        }
-
-        if (partialPath.includes(path.sep)) {
-            const pattern = `**/${partialPath.replace(/[\\\/]/g, '/')}`;
-            outputChannel.appendLine('Searching with pattern: ' + pattern);
-            const files = await vscode.workspace.findFiles(pattern, null, 10);
-            outputChannel.appendLine('Found files: ' + JSON.stringify(files.map(f => f.fsPath)));
-
-            for (const file of files) {
-                const normalizedFilePath = file.fsPath.replace(/[\\\/]/g, path.sep);
-                const normalizedPartialPath = partialPath.replace(/[\\\/]/g, path.sep);
-
-                if (normalizedFilePath.endsWith(path.sep + normalizedPartialPath) ||
-                    normalizedFilePath.endsWith(normalizedPartialPath)) {
-                    outputChannel.appendLine('Match found: ' + file.fsPath);
-                    return file.fsPath;
-                }
-            }
-        }
-    }
-
-    const fileName = path.basename(filePath);
-    if (fileName && fileName !== filePath) {
-        outputChannel.appendLine('Trying to find by filename: ' + fileName);
-        const pattern = `**/${fileName}`;
-        const files = await vscode.workspace.findFiles(pattern, null, 10);
-        
-        if (files.length === 1) {
-            outputChannel.appendLine('Found single file by name: ' + files[0].fsPath);
-            return files[0].fsPath;
-        } else if (files.length > 1) {
-            outputChannel.appendLine('Multiple files found with same name, checking best match');
-            
-            const pathSegments = filePath.split(/[\\\/]/).slice(-3, -1);
-            outputChannel.appendLine('Looking for path segments: ' + JSON.stringify(pathSegments));
-            
-            for (const file of files) {
-                const filePathLower = file.fsPath.toLowerCase();
-                const matchesAllSegments = pathSegments.every(segment => 
-                    filePathLower.includes(segment.toLowerCase())
-                );
-                
-                if (matchesAllSegments) {
-                    outputChannel.appendLine('Best match found: ' + file.fsPath);
-                    return file.fsPath;
-                }
-            }
-            
-            outputChannel.appendLine('No best match, returning first: ' + files[0].fsPath);
-            return files[0].fsPath;
-        }
-    }
-
-    outputChannel.appendLine('No file found for: ' + filePath);
+    outputChannel.appendLine('File not found with exact matching: ' + strippedPath);
     return null;
 }
 
@@ -211,7 +168,7 @@ async function showFileSelectionDialog(references: FileLineReference[]): Promise
     }
     
     const items: vscode.QuickPickItem[] = resolvedRefs.slice().reverse().map(({reference: ref, resolvedPath}) => ({
-        label: `${ref.file}:${ref.line}${ref.column ? ':' + ref.column : ''}`,
+        label: `${stripDisplayPath(ref.file)}:${ref.line}${ref.column ? ':' + ref.column : ''}`,
         description: ref.originalText,
         detail: `Line ${ref.line}${ref.column ? ', Column ' + ref.column : ''} → ${resolvedPath}`
     }));

@@ -1,17 +1,34 @@
 # Go to Clipboard File
 
-VS Code extension that parses stacktraces and other fuzzy file:line references from your clipboard and navigates to them. Perfect for jumping to files from stacktraces, error logs, and test outputs. If parsing fails, it will fallback to VS Code's Quick Open, so it's a good substitute for a generic go-to-file command.
+VS Code extension that parses file:line references from your clipboard and opens them directly in the editor. Perfect for jumping to specific locations from stacktraces, error logs, test outputs, and any text containing file paths with line numbers.
 
-## Features
+For example, if your clipboard contains:
 
-- Parse file:line references from clipboard
-- Support for multiple formats:
-  - Python stacktraces: `File "/path/to/file.py", line 42`
-  - JavaScript/Node: `at function (/path/to/file.js:123:45)`
-  - Generic patterns: `file.txt:123` or `file.txt:123:45`
-- Show selection dialog when multiple references found
-- Fall back to VS Code's Quick Open when no references found
-- Smart file resolution with progressive path stripping
+```text
+Error: Something went wrong
+    at Object.<anonymous> (/src/index.js:42:15)
+    at Module._compile (internal/modules/cjs/loader.js:1063:30)
+```
+
+Then in this repository it will show:
+
+![example popup](readme-example.png)
+
+## What it does
+
+1. **Reads your clipboard** for file:line references
+2. **Parses multiple formats** including Python stacktraces, JavaScript stack traces, and generic file:line patterns
+3. **Resolves file paths** intelligently - checks absolute paths first, then workspace-relative paths
+4. **Opens files directly** at the specified line and column (when available)
+5. **Shows selection dialog** when multiple references are found
+6. **Falls back to Quick Open** when no file references are detected
+
+## Supported formats
+
+- **Python stacktraces**: `File "/path/to/file.py", line 42`
+- **JavaScript/Node stacktraces**: `at function (/path/to/file.js:123:45)`
+- **Generic file:line patterns**: `file.txt:123`, `src/app.py:45:12`, `./relative/path.js:10`
+- **Absolute and relative paths**: Works with both `/absolute/paths` and `relative/paths`
 
 ## Keyboard Shortcut
 
@@ -46,7 +63,7 @@ npm run compile
 
 4. Package the extension:
 ```bash
-npx @vscode/vsce package
+npm run package
 ```
 
 This creates a `.vsix` file in the project directory.
@@ -54,6 +71,7 @@ This creates a `.vsix` file in the project directory.
 ### Install the Extension
 
 #### Option 1: Install via Command Line
+
 ```bash
 code --install-extension go-to-clipboard-file-0.0.1.vsix
 ```
@@ -80,10 +98,16 @@ npm run watch
 
 ## Usage
 
-1. Copy a stacktrace or error message containing file:line references to your clipboard
-2. Press `Ctrl+Shift+G` (or `Cmd+Shift+G` on Mac)
-3. If multiple references found, select from the quick pick menu
-4. VS Code will open the file at the specified line
+1. **Copy text with file references** - Copy any text containing file paths with line numbers (stacktraces, error logs, etc.)
+2. **Use the keyboard shortcut** - Press `Ctrl+Shift+G` (Windows/Linux) or `Cmd+Shift+G` (Mac)
+3. **Select file if needed** - If multiple valid files are found, pick from the dialog (most recent entries shown first)
+4. **Navigate instantly** - VS Code opens the file and jumps to the exact line and column
+
+**Pro tips:**
+- Works with any text format containing `filename:line` or `filename:line:column` patterns
+- Automatically filters out non-existent files from selection
+- Falls back to Quick Open (`Ctrl+P`) if no file references are detected
+- Configure `stripPrefixes` to handle Docker/container paths that don't match your local filesystem
 
 ## Example Stacktraces
 
@@ -111,17 +135,71 @@ Error in src/components/Button.tsx:45
 Failed at utils/helper.js:123:8
 ```
 
-## File Resolution
+## Try it out
 
-The extension uses smart path resolution to find files in your workspace:
+Test the extension immediately with these examples from this repository. **Copy any line below**, then press `Ctrl+Shift+G` (or `Cmd+Shift+G` on Mac):
 
-1. **Absolute paths**: Checked directly if they exist
-2. **Relative paths**: Tried as-is relative to workspace folders
-3. **Progressive path stripping**: Removes parent directories one by one until a match is found
-   - `z/y/README.md` → `y/README.md` → `README.md`
-   - `container/./src/parser.ts` → `./src/parser.ts` → `src/parser.ts`
-4. **Filename search**: Falls back to searching by filename alone
-5. **Best match selection**: When multiple files with same name exist, picks best path segment match
+```
+src/extension.ts:15
+src/parser.ts:42
+package.json:5
+tsconfig.json:8
+README.md:25
+src/test/suite/extension.test.ts:10
+```
+
+Or copy this mock Python stacktrace:
+```
+Traceback (most recent call last):
+  File "src/extension.ts", line 25, in activate
+    registerCommand()
+  File "src/parser.ts", line 68, in parseClipboard
+    return extractFiles()
+```
+
+Or this JavaScript error format:
+```
+Error occurred:
+    at activate (src/extension.ts:31:12)
+    at parseFileReferences (src/parser.ts:89:5)
+    at Object.<anonymous> (package.json:1:1)
+```
+
+The extension will parse these and let you jump directly to the files in this repository!
+
+## Configuration
+
+You can configure the extension by adding settings to your VS Code settings:
+
+```json
+{
+  "go-to-clipboard-file.stripPrefixes": [
+    "/app/",
+    "/workspace/",
+    "/usr/src/app/",
+    "C:\\container\\"
+  ]
+}
+```
+
+### Settings
+
+- `go-to-clipboard-file.stripPrefixes`: Array of path prefixes to strip from file paths. Useful for handling container paths that VS Code wouldn't otherwise recognize.
+
+## How file resolution works
+
+The extension intelligently resolves file paths in this order:
+
+1. **Absolute paths**: If the path starts with `/` or `C:\`, checks if the file exists directly
+2. **Strip configured prefixes**: Removes prefixes like `/app/`, `/workspace/` (see Configuration)
+3. **Workspace relative**: Tries the path relative to each workspace folder
+4. **Pre-validation**: Only shows files that actually exist on disk in selection dialogs
+
+**Key behaviors:**
+- Skips non-existent files from selection dialogs
+- If only one valid file remains after filtering, opens it directly
+- Preserves line and column information for precise navigation
+- Shows most recent stacktrace entries first in selection dialog
 
 ## Testing
 
