@@ -1,6 +1,6 @@
 # Go to Clipboard File
 
-VS Code extension that parses file:line references from your clipboard and navigates to them. Perfect for jumping to files from stacktraces, error logs, and test outputs.
+VS Code extension that parses stacktraces and other fuzzy file:line references from your clipboard and navigates to them. Perfect for jumping to files from stacktraces, error logs, and test outputs. If parsing fails, it will fallback to VS Code's Quick Open, so it's a good substitute for a generic go-to-file command.
 
 ## Features
 
@@ -11,7 +11,7 @@ VS Code extension that parses file:line references from your clipboard and navig
   - Generic patterns: `file.txt:123` or `file.txt:123:45`
 - Show selection dialog when multiple references found
 - Fall back to VS Code's Quick Open when no references found
-- Smart file resolution (absolute paths, relative paths, workspace search)
+- Smart file resolution with progressive path stripping
 
 ## Keyboard Shortcut
 
@@ -110,6 +110,18 @@ Error: Something went wrong
 Error in src/components/Button.tsx:45
 Failed at utils/helper.js:123:8
 ```
+
+## File Resolution
+
+The extension uses smart path resolution to find files in your workspace:
+
+1. **Absolute paths**: Checked directly if they exist
+2. **Relative paths**: Tried as-is relative to workspace folders
+3. **Progressive path stripping**: Removes parent directories one by one until a match is found
+   - `z/y/README.md` → `y/README.md` → `README.md`
+   - `container/./src/parser.ts` → `./src/parser.ts` → `src/parser.ts`
+4. **Filename search**: Falls back to searching by filename alone
+5. **Best match selection**: When multiple files with same name exist, picks best path segment match
 
 ## Testing
 

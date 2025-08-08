@@ -3,6 +3,16 @@
   "displayName": "Go to Clipboard File",
   "description": "Navigate to file:line references from clipboard",
   "version": "0.0.1",
+  "publisher": "StefanoChiodino",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/StefanoChiodino/go-to-clipboard-file.git"
+  },
+  "bugs": {
+    "url": "https://github.com/StefanoChiodino/go-to-clipboard-file/issues"
+  },
+  "homepage": "https://github.com/StefanoChiodino/go-to-clipboard-file#readme",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -30,7 +40,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "package": "./node_modules/.bin/vsce package"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
