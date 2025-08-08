@@ -1,10 +1,22 @@
 .vscode/**
 .vscode-test/**
-src/**
+.git/**
 .gitignore
 .yarnrc
+.claude/**
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/.eslintrc.json
 **/*.map
 **/*.ts
+src/**
+test/**
+node_modules/**
+package-lock.json
+*.vsix
+.DS_Store
+**/.nyc_output/**
+**/coverage/**
+
+
+VS Code extension for navigating to clipboard file paths

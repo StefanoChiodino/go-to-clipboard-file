@@ -62,6 +62,15 @@ async function openFileAtLocation(reference: FileLineReference): Promise<void> {
             return;
         }
 
+        await openResolvedFile(reference, filePath);
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to open file: ${error}`);
+    }
+}
+
+async function openResolvedFile(reference: FileLineReference, filePath: string): Promise<void> {
+    try {
+        outputChannel.appendLine('Opening resolved file: ' + filePath);
         const document = await vscode.workspace.openTextDocument(filePath);
         const editor = await vscode.window.showTextDocument(document);
 
@@ -177,25 +186,49 @@ async function resolveFilePath(filePath: string): Promise<string | null> {
 }
 
 async function showFileSelectionDialog(references: FileLineReference[]): Promise<void> {
-    const items: vscode.QuickPickItem[] = references.map(ref => ({
+    outputChannel.appendLine('Pre-resolving file paths...');
+    
+    const resolvedRefs: Array<{reference: FileLineReference, resolvedPath: string}> = [];
+    
+    for (const ref of references) {
+        const resolvedPath = await resolveFilePath(ref.file);
+        if (resolvedPath) {
+            resolvedRefs.push({ reference: ref, resolvedPath });
+        } else {
+            outputChannel.appendLine(`Skipping non-existent file: ${ref.file}`);
+        }
+    }
+    
+    if (resolvedRefs.length === 0) {
+        vscode.window.showErrorMessage('No valid file references found');
+        return;
+    }
+    
+    if (resolvedRefs.length === 1) {
+        outputChannel.appendLine('Only one valid file found, opening directly');
+        await openResolvedFile(resolvedRefs[0].reference, resolvedRefs[0].resolvedPath);
+        return;
+    }
+    
+    const items: vscode.QuickPickItem[] = resolvedRefs.slice().reverse().map(({reference: ref, resolvedPath}) => ({
         label: `${ref.file}:${ref.line}${ref.column ? ':' + ref.column : ''}`,
         description: ref.originalText,
-        detail: `Line ${ref.line}${ref.column ? ', Column ' + ref.column : ''}`
+        detail: `Line ${ref.line}${ref.column ? ', Column ' + ref.column : ''} → ${resolvedPath}`
     }));
 
     const quickPick = vscode.window.createQuickPick();
     quickPick.items = items;
     quickPick.placeholder = 'Select a file to open';
-    quickPick.title = 'Multiple file references found';
-    quickPick.activeItems = [items[items.length - 1]];
-    quickPick.selectedItems = [items[items.length - 1]];
+    quickPick.title = `${resolvedRefs.length} valid file references found`;
     
     quickPick.onDidAccept(() => {
         const selected = quickPick.selectedItems[0];
         if (selected) {
             const index = items.indexOf(selected);
             if (index >= 0) {
-                openFileAtLocation(references[index]);
+                const reversedIndex = resolvedRefs.length - 1 - index;
+                const resolvedRef = resolvedRefs[reversedIndex];
+                openResolvedFile(resolvedRef.reference, resolvedRef.resolvedPath);
             }
         }
         quickPick.dispose();

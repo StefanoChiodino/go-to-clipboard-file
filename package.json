@@ -37,11 +37,14 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "node ./out/test/runTest.js",
-    "package": "./node_modules/.bin/vsce package"
+    "package": "rm *.vsix; ./node_modules/.bin/vsce package"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
@@ -49,6 +52,7 @@
     "@types/node": "16.x",
     "@types/vscode": "^1.74.0",
     "@vscode/test-electron": "^2.3.0",
+    "esbuild": "^0.17.19",
     "glob": "^8.1.0",
     "mocha": "^11.5.0",
     "typescript": "^4.9.4"
