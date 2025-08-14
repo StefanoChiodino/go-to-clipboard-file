@@ -59,7 +59,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "node ./out/test/runTest.js",
-    "package": "rm *.vsix; ./node_modules/.bin/vsce package"
+    "package": "rm -f *.vsix || true && vsce package"
   },
 
   "dependencies": {},

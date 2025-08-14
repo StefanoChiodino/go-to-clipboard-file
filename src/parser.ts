@@ -5,70 +5,72 @@ export interface FileLineReference {
     originalText: string;
 }
 
+type Parser = {
+    regex: RegExp;
+    multiMatch: boolean;
+    transformer: (match: RegExpExecArray) => Omit<FileLineReference, 'originalText'>;
+};
+
+const parsers: Parser[] = [
+    {
+        regex: /^\s*File "([^"]+)", line ([0-9]+)/,
+        multiMatch: false,
+        transformer: match => ({
+            file: match[1],
+            line: parseInt(match[2], 10),
+        }),
+    },
+    {
+        regex: /at .*\(([^:)]+):([0-9]+):([0-9]+)\)/,
+        multiMatch: false,
+        transformer: match => ({
+            file: match[1],
+            line: parseInt(match[2], 10),
+            column: parseInt(match[3], 10),
+        }),
+    },
+    {
+        regex: /([a-zA-Z]:[\\/][^\s:]+|\/[^\s:]+|\.?\.?\/[^\s:]+|~\/[^\s:]+|[a-zA-Z0-9_\-\.\/]+\.[a-zA-Z]+):([0-9]+)(?::([0-9]+))?/g,
+        multiMatch: true,
+        transformer: match => ({
+            file: match[1],
+            line: parseInt(match[2], 10),
+            column: match[3] ? parseInt(match[3], 10) : undefined,
+        }),
+    },
+];
+
+function normalizePath(filePath: string): string {
+    return filePath.replace(/^\.\//, '').replace(/\/\.\//g, '/');
+}
+
 export function parseFileReferences(text: string): FileLineReference[] {
     const references: FileLineReference[] = [];
     const seenReferences = new Set<string>();
-    
-    const lines = text.split('\n');
-    
-    for (const line of lines) {
-        let matched = false;
-        
-        const pythonMatch = /^\s*File "([^"]+)", line ([0-9]+)/.exec(line);
-        if (pythonMatch && !matched) {
-            matched = true;
-            const file = pythonMatch[1].replace(/^\.\//, '').replace(/\/\.\//g, '/');
-            const lineNum = parseInt(pythonMatch[2], 10);
-            const key = `${file}:${lineNum}:0`;
-            if (!seenReferences.has(key) && lineNum > 0) {
-                seenReferences.add(key);
-                references.push({
-                    file,
-                    line: lineNum,
-                    column: undefined,
-                    originalText: pythonMatch[0].trim()
-                });
-            }
+
+    const addReference = (ref: Omit<FileLineReference, 'originalText'>, originalText: string) => {
+        const file = normalizePath(ref.file);
+        const key = `${file}:${ref.line}:${ref.column || 0}`;
+        if (!seenReferences.has(key) && ref.line > 0) {
+            seenReferences.add(key);
+            references.push({ ...ref, file, originalText });
         }
-        
-        const jsStackMatch = /at .*\(([^:)]+):([0-9]+):([0-9]+)\)/.exec(line);
-        if (jsStackMatch && !matched) {
-            matched = true;
-            const file = jsStackMatch[1].replace(/^\.\//, '').replace(/\/\.\//g, '/');
-            const lineNum = parseInt(jsStackMatch[2], 10);
-            const column = parseInt(jsStackMatch[3], 10);
-            const key = `${file}:${lineNum}:${column}`;
-            if (!seenReferences.has(key) && lineNum > 0) {
-                seenReferences.add(key);
-                references.push({
-                    file,
-                    line: lineNum,
-                    column,
-                    originalText: jsStackMatch[0]
-                });
-            }
-        }
-        
-        if (!matched) {
-            const fileLinePattern = /([a-zA-Z]:[\\/][^\s:]+|\/[^\s:]+|\.?\.?\/[^\s:]+|~\/[^\s:]+|[a-zA-Z0-9_\-\.\/]+\.[a-zA-Z]+):([0-9]+)(?::([0-9]+))?/g;
+    };
+
+    for (const line of text.split('\n')) {
+        let lineMatched = false;
+        for (const parser of parsers) {
+            if (lineMatched && !parser.multiMatch) continue;
+
             let match;
-            while ((match = fileLinePattern.exec(line)) !== null) {
-                const file = match[1].replace(/^\.\//, '').replace(/\/\.\//g, '/');
-                const lineNum = parseInt(match[2], 10);
-                const column = match[3] ? parseInt(match[3], 10) : undefined;
-                const key = `${file}:${lineNum}:${column || 0}`;
-                if (!seenReferences.has(key) && lineNum > 0) {
-                    seenReferences.add(key);
-                    references.push({
-                        file,
-                        line: lineNum,
-                        column,
-                        originalText: match[0]
-                    });
-                }
+            while ((match = parser.regex.exec(line)) !== null) {
+                const reference = parser.transformer(match);
+                addReference(reference, match[0].trim());
+                lineMatched = true;
+                if (!parser.multiMatch) break;
             }
         }
     }
-    
+
     return references;
 }

@@ -1,66 +1,119 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
-import { FileLineReference } from '../../parser';
+import * as sinon from 'sinon';
+import { resolveFilePath } from '../../extension';
 
 suite('File Resolution Test Suite', () => {
-    const testWorkspaceFolder = '/tmp/test-workspace';
+    let findFilesStub: sinon.SinonStub;
+    let statStub: sinon.SinonStub;
+    let getConfigurationStub: sinon.SinonStub;
+
+    setup(() => {
+        findFilesStub = sinon.stub(vscode.workspace, 'findFiles');
+        statStub = sinon.stub(vscode.workspace.fs, 'stat');
+        getConfigurationStub = sinon.stub(vscode.workspace, 'getConfiguration');
+        sinon.replaceGetter(vscode.workspace, 'workspaceFolders', () => [{
+            uri: vscode.Uri.file('/workspace'),
+            name: 'test-workspace',
+            index: 0
+        }]);
+        
+        getConfigurationStub.withArgs('go-to-clipboard-file').returns({
+            get: (key: string) => {
+                if (key === 'stripPrefixes') {
+                    return [];
+                }
+                return undefined;
+            }
+        });
+    });
+
+    teardown(() => {
+        sinon.restore();
+    });
+
+    test('Should resolve an existing absolute path', async () => {
+        const absolutePath = '/workspace/src/app.ts';
+        statStub.withArgs(vscode.Uri.file(absolutePath)).resolves();
+        
+        const result = await resolveFilePath(absolutePath);
+        assert.strictEqual(result, absolutePath);
+        assert.ok(statStub.calledOnce);
+        assert.ok(findFilesStub.notCalled);
+    });
+
+    test('Should resolve a file within the workspace', async () => {
+        const relativePath = 'src/app.ts';
+        const fullPath = '/workspace/src/app.ts';
+        statStub.withArgs(vscode.Uri.file(relativePath)).rejects();
+        findFilesStub.resolves([vscode.Uri.file(fullPath)]);
+
+        const result = await resolveFilePath(relativePath);
+        assert.strictEqual(result, fullPath);
+        assert.ok(findFilesStub.calledOnce);
+    });
+
+    test('Should return null if no file is found', async () => {
+        const nonExistentPath = 'src/nonexistent.ts';
+        statStub.withArgs(vscode.Uri.file(nonExistentPath)).rejects();
+        findFilesStub.resolves([]);
+
+        const result = await resolveFilePath(nonExistentPath);
+        assert.strictEqual(result, null);
+    });
+
+    test('Should strip prefix and resolve', async () => {
+        getConfigurationStub.withArgs('go-to-clipboard-file').returns({
+            get: (key: string) => {
+                if (key === 'stripPrefixes') {
+                    return ['/app/'];
+                }
+                return undefined;
+            }
+        });
+
+        const pathWithPrefix = '/app/src/component.tsx';
+        const strippedPath = 'src/component.tsx';
+        const fullPath = `/workspace/${strippedPath}`;
+        
+        statStub.withArgs(vscode.Uri.file(pathWithPrefix)).rejects();
+        findFilesStub.resolves([vscode.Uri.file(fullPath)]);
+
+        const result = await resolveFilePath(pathWithPrefix);
+        assert.strictEqual(result, fullPath);
+    });
+
+    test('Should pick the best match when multiple files are found', async () => {
+        const ambiguousPath = 'ui/button.tsx';
+        const files = [
+            vscode.Uri.file('/workspace/src/old/ui/button.tsx'),
+            vscode.Uri.file('/workspace/src/components/ui/button.tsx'),
+            vscode.Uri.file('/workspace/lib/ui/button.tsx'),
+        ];
+        findFilesStub.resolves(files);
+
+        const result = await resolveFilePath(ambiguousPath);
+        assert.strictEqual(result, '/workspace/src/components/ui/button.tsx');
+    });
     
-    suiteSetup(async () => {
-        if (!fs.existsSync(testWorkspaceFolder)) {
-            fs.mkdirSync(testWorkspaceFolder, { recursive: true });
-        }
+    test('Should pick the best match with deeper path', async () => {
+        const ambiguousPath = 'components/ui/button.tsx';
+        const files = [
+            vscode.Uri.file('/workspace/src/old/components/ui/button.tsx'),
+            vscode.Uri.file('/workspace/src/components/ui/button.tsx'),
+        ];
+        findFilesStub.resolves(files);
+
+        const result = await resolveFilePath(ambiguousPath);
+        assert.strictEqual(result, '/workspace/src/components/ui/button.tsx');
+    });
+
+    test('Should return null if no workspace is open', async () => {
+        sinon.replaceGetter(vscode.workspace, 'workspaceFolders', () => undefined);
         
-        const testFilePath = path.join(testWorkspaceFolder, 'test.py');
-        fs.writeFileSync(testFilePath, 'print("Hello, World!")\n');
-        
-        const nestedDir = path.join(testWorkspaceFolder, 'src');
-        if (!fs.existsSync(nestedDir)) {
-            fs.mkdirSync(nestedDir);
-        }
-        const nestedFilePath = path.join(nestedDir, 'main.js');
-        fs.writeFileSync(nestedFilePath, 'console.log("Test");\n');
-    });
-    
-    suiteTeardown(() => {
-        if (fs.existsSync(testWorkspaceFolder)) {
-            fs.rmSync(testWorkspaceFolder, { recursive: true, force: true });
-        }
-    });
-
-    test('Should handle absolute paths that exist', () => {
-        const testFile = path.join(testWorkspaceFolder, 'test.py');
-        assert.ok(fs.existsSync(testFile));
-    });
-
-    test('Should handle nested file structures', () => {
-        const nestedFile = path.join(testWorkspaceFolder, 'src', 'main.js');
-        assert.ok(fs.existsSync(nestedFile));
-    });
-
-    test('Should handle non-existent files gracefully', () => {
-        const nonExistentFile = path.join(testWorkspaceFolder, 'does-not-exist.py');
-        assert.ok(!fs.existsSync(nonExistentFile));
-    });
-
-    test('Should validate path normalization', () => {
-        const pathWithDotSlash = './test.py';
-        const normalized = pathWithDotSlash.replace(/^\.\//, '').replace(/\/\.\//g, '/');
-        assert.strictEqual(normalized, 'test.py');
-        
-        const pathWithNestedDotSlash = '/home/user/./project/./src/file.py';
-        const normalizedNested = pathWithNestedDotSlash.replace(/^\.\//, '').replace(/\/\.\//g, '/');
-        assert.strictEqual(normalizedNested, '/home/user/project/src/file.py');
-    });
-
-    test('Should handle Windows paths', () => {
-        const windowsPath = 'C:\\Users\\test\\project\\file.py';
-        assert.ok(path.isAbsolute(windowsPath));
-    });
-
-    test('Should handle Unix paths', () => {
-        const unixPath = '/home/user/project/file.py';
-        assert.ok(path.isAbsolute(unixPath));
+        const relativePath = 'src/app.ts';
+        statStub.withArgs(vscode.Uri.file(relativePath)).rejects();
+        const result = await resolveFilePath(relativePath);
+        assert.strictEqual(result, null);
     });
 });

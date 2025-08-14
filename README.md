@@ -47,7 +47,7 @@ Then in this repository it will show:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/go-to-clipboard-file.git
+git clone https://github.com/StefanoChiodino/go-to-clipboard-file.git
 cd go-to-clipboard-file
 ```
 
@@ -73,7 +73,7 @@ This creates a `.vsix` file in the project directory.
 #### Option 1: Install via Command Line
 
 ```bash
-code --install-extension go-to-clipboard-file-0.0.1.vsix
+code --install-extension go-to-clipboard-file-<version>.vsix
 ```
 
 #### Option 2: Install via VS Code UI
@@ -207,6 +207,8 @@ Run the test suite:
 ```bash
 npm test
 ```
+
+Note: VS Code integration tests require a display server. On headless Linux, run tests in CI (e.g., GitHub Actions using xvfb), or run only non-Electron unit tests locally.
 
 ## License
 
