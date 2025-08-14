@@ -65,6 +65,7 @@
   "dependencies": {},
   "devDependencies": {
     "@vscode/vsce": "^2.18.0",
+    "ovsx": "^0.9.2",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "16.x",
